@@ -37,11 +37,12 @@ const htmlToElement = (html: string): HTMLElement => {
 	return node as HTMLElement;
 };
 
-const DEFAULT_THROTTLE = 200;
-const DEFAULT_CLUSTER_HTML = (d: Cluster<LatLng>) =>
-	d.points.length === 1 ? undefined : `<div class="cluster">${d.points.length}</div>`;
-
-const DEFAULT_OPTIONS = { throttle: DEFAULT_THROTTLE, clusterHTML: DEFAULT_CLUSTER_HTML };
+const DEFAULT_OPTIONS = {
+	throttle: 200,
+	clusterHTML: (d: Cluster<LatLng>) =>
+		d.points.length === 1 ? undefined : `<div class="cluster">${d.points.length}</div>`,
+	cellSize: 150
+};
 
 export type LatLng = { lat: number; lng: number };
 export type Cluster<T extends LatLng> = {
@@ -68,6 +69,11 @@ export const addClusteredLayer = <T extends { lat: number; lng: number }>(
 		 * @param cluster
 		 */
 		onClick?: (cluster: Cluster<T>) => void;
+		/**
+		 * defines how big are the cells were points are clustered
+		 * @default 150
+		 */
+		cellSize?: number;
 	} = DEFAULT_OPTIONS
 ) => {
 	options = { ...DEFAULT_OPTIONS, ...options };
