@@ -43,8 +43,8 @@ const DEFAULT_CLUSTER_HTML = (d: Cluster<LatLng>) =>
 
 const DEFAULT_OPTIONS = { throttle: DEFAULT_THROTTLE, clusterHTML: DEFAULT_CLUSTER_HTML };
 
-type LatLng = { lat: number; lng: number };
-type Cluster<T extends LatLng> = {
+export type LatLng = { lat: number; lng: number };
+export type Cluster<T extends LatLng> = {
 	id: string;
 	center: LatLng;
 	points: T[];

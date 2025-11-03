@@ -1,12 +1,11 @@
+import type { LatLng } from '$lib';
+
 type GridOptions<T> = {
 	cellSize: number;
 	/** Accessor that converts each item into a numeric vector when using default distance. */
 	vector: (item: T) => number[];
 };
-export const grid = <T extends { lat: number; lng: number }>(
-	data: T[],
-	options: GridOptions<T>
-) => {
+export const grid = <T extends LatLng>(data: T[], options: GridOptions<T>) => {
 	const buckets = {} as Record<string, T[]>;
 	for (const [i, point] of data.entries()) {
 		const [x, y] = options.vector(point);
