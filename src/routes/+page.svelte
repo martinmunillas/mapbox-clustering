@@ -28,7 +28,11 @@
 
 			const d = data.slice(0, 10_000).map((d) => ({ lat: d.latitude, lng: d.longitude }));
 
-			addClusteredLayer(map, d, {});
+			addClusteredLayer(map, d, {
+				onClick: ({ cluster, zoomCluster }) => {
+					zoomCluster({ padding: 200 });
+				}
+			});
 		});
 	});
 </script>

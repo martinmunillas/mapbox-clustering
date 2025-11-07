@@ -1,5 +1,5 @@
 {
-	"name": "svelte-mapbox-clusters",
+	"name": "mapbox-clustering",
 	"version": "0.3.0",
 	"scripts": {
 		"dev": "vite dev",
@@ -32,17 +32,17 @@
 		}
 	},
 	"peerDependencies": {
-		"svelte": "^5.0.0",
-		"mapbox-gl": "^3.16.0"
+		"mapbox-gl": "^3.16.0",
+		"svelte": "^5.0.0"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^7.0.0",
 		"@sveltejs/adapter-static": "^3.0.10",
-		"mapbox-gl": "^3.16.0",
 		"@sveltejs/kit": "^2.47.1",
 		"@sveltejs/package": "^2.5.4",
 		"@sveltejs/vite-plugin-svelte": "^6.2.1",
 		"@vitest/browser": "^3.2.4",
+		"mapbox-gl": "^3.16.0",
 		"playwright": "^1.56.1",
 		"prettier": "^3.6.2",
 		"prettier-plugin-svelte": "^3.4.0",
@@ -57,5 +57,8 @@
 	"keywords": [
 		"svelte"
 	],
-	"dependencies": {}
+	"dependencies": {
+		"h3-js": "^4.3.0",
+		"s2js": "^1.43.6"
+	}
 }
