@@ -145,7 +145,7 @@ export type Cluster<T extends LatLng> = {
 	points: T[];
 };
 
-export type AddClusteredLayerOptions<T extends LatLng, OmitClustering extends boolean = false> = {
+export type AddClusteredLayerOptions<T extends LatLng> = {
 	/**
 	 * Min number of milliseconds in between computation executions
 	 * @default 200
@@ -155,7 +155,7 @@ export type AddClusteredLayerOptions<T extends LatLng, OmitClustering extends bo
 	 * Will create all clusters of 1 point
 	 * @default false
 	 */
-	omitClustering?: OmitClustering;
+	omitClustering?: boolean;
 	/**
 	 * The HTML to be rendered on each cluster.
 	 */
