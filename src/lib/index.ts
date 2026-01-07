@@ -299,14 +299,17 @@ export const addClusteredLayer = <T extends { lat: number; lng: number }>(
 				element.onclick = (e) => {
 					e.stopPropagation();
 
-					const zoomCluster = (options: { padding: number | mapboxgl.PaddingOptions }) => {
+					const zoomCluster = (options: {
+						padding: number | mapboxgl.PaddingOptions;
+						maxZoom?: number;
+					}) => {
 						const bounds = new mapbox.LngLatBounds();
 						for (const point of cluster.points) {
 							bounds.extend(point);
 						}
 						map.fitBounds(bounds, {
 							padding: options.padding,
-							maxZoom: 14.5,
+							maxZoom: options.maxZoom ?? 14.5,
 							duration: 500,
 							linear: true
 						});
