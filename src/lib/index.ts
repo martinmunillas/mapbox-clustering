@@ -170,7 +170,7 @@ export type AddClusteredLayerOptions<T extends LatLng> = {
 	 */
 	onClick?: (params: {
 		cluster: Cluster<T>;
-		zoomCluster: (options: { padding: number | mapboxgl.PaddingOptions }) => void;
+		zoomCluster: (options: { padding: number | mapboxgl.PaddingOptions; maxZoom?: number }) => void;
 		zoom: number;
 	}) => void;
 	onMouseOver?: (params: { cluster: Cluster<T> }) => void;
@@ -299,7 +299,11 @@ export const addClusteredLayer = <T extends { lat: number; lng: number }>(
 				element.onclick = (e) => {
 					e.stopPropagation();
 
-					const zoomCluster = (options: {
+					type ZoomCluster = Parameters<
+						NonNullable<AddClusteredLayerOptions<T>['onClick']>
+					>[0]['zoomCluster'];
+
+					const zoomCluster: ZoomCluster = (options: {
 						padding: number | mapboxgl.PaddingOptions;
 						maxZoom?: number;
 					}) => {
