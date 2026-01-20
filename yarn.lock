@@ -600,11 +600,6 @@ axobject-query@^4.1.0:
   resolved "https://registry.npmjs.org/axobject-query/-/axobject-query-4.1.0.tgz"
   integrity sha512-qIj0G9wZbMGNLjLmg1PT6v2mE9AH2zlnADJD/2tC6E00hgmhUOfEB6greHPAfLRSufHqROIUTkw6E+M3lH0PTQ==
 
-bigfloat@^0.1.1:
-  version "0.1.1"
-  resolved "https://registry.yarnpkg.com/bigfloat/-/bigfloat-0.1.1.tgz#ba9bd60305c527ed0814ee40f75f6de9034e13c5"
-  integrity sha512-kKEqZxc86qgQ6xe8+sN1qQ4XzgksND5QKn6CPrFyQcq/oih+Xk7CaqOD0PKjqar8oO7v4ont5bOHox+LYxD6sQ==
-
 cac@^6.7.14:
   version "6.7.14"
   resolved "https://registry.npmjs.org/cac/-/cac-6.7.14.tgz"
@@ -1058,13 +1053,6 @@ rollup@^4.43.0:
     "@rollup/rollup-win32-x64-gnu" "4.52.5"
     "@rollup/rollup-win32-x64-msvc" "4.52.5"
     fsevents "~2.3.2"
-
-s2js@^1.43.6:
-  version "1.43.6"
-  resolved "https://registry.yarnpkg.com/s2js/-/s2js-1.43.6.tgz#1934fe3f51fa13fd22074bcf31a330d251f543df"
-  integrity sha512-cgTyjeqCVcacG699Rl5nZhyoazwoBs9S5DG/e6O1zxZ71IIWwiy2gF7BJxJWZ6Y+MppoGLOqMSSknGWAZrOgLA==
-  dependencies:
-    bigfloat "^0.1.1"
 
 sade@^1.7.4, sade@^1.8.1:
   version "1.8.1"

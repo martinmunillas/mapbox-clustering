@@ -31,7 +31,8 @@
 			addClusteredLayer(map, d, {
 				onClick: ({ cluster, zoomCluster }) => {
 					zoomCluster({ padding: 200 });
-				}
+				},
+				clusterElementSize: 40
 			});
 		});
 	});

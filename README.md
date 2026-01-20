@@ -1,272 +1,143 @@
 # mapbox-clustering
 
-Tiny, opinionated clustering helper for **Mapbox GL** that uses an H3 / S2-style grid under the hood to create **marker-based clusters** on the client.
-
-You give it:
-
-- a `mapboxgl.Map`
-- an array of `{ lat, lng }` points
-
-…and it gives you:
-
-- computed clusters based on current **viewport bounds** & **zoom**
-- automatic recomputation on zoom (throttled & debounced)
-- full control over **cluster marker HTML** & **click/hover behavior**
-
----
+Client-side marker clustering for Mapbox GL using [H3](https://h3geo.org/) hexagonal grid.
 
 ## Features
 
-- 🧮 Grid-based clustering using [H3](https://github.com/uber/h3-js) (S2 helpers are in the codebase and easy to wire in)
-- 🗺 Cluster only what’s **visible in the map bounds**
-- ♻️ Automatic recompute on `zoom` / `zoomend` with sensible throttling / debouncing
-- 🎨 Fully customizable cluster markers via HTML
-- 🧠 Smart cluster centering strategy (cell center + centroid blend)
-- 🧊 Option to **omit clustering** and still reuse all event hooks
-
----
+- **Collision-aware clustering** - Automatically adjusts cluster resolution based on your marker size to prevent overlapping
+- **Viewport-optimized** - Only clusters points visible in the current map bounds
+- **Customizable markers** - Full control over cluster HTML, styling, and behavior
+- **Smart centering** - Intelligent cluster positioning that balances accuracy with collision avoidance
+- **TypeScript** - Full type support with generics for your point data
 
 ## Installation
 
 ```bash
-npm install mapbox-clustering mapbox-gl
-# or
-yarn add mapbox-clustering mapbox-gl
-# or
-pnpm add mapbox-clustering mapbox-gl
+npm install mapbox-clustering
 ```
-You must already have a working Mapbox GL setup (access token, styles, etc.).
+
+**Peer dependencies:** `mapbox-gl` (^3.16.0)
 
 ## Quick Start
+
 ```typescript
 import mapboxgl from 'mapbox-gl';
-import { addClusteredLayer, LatLng } from 'mapbox-clustering';
+import { addClusteredLayer } from 'mapbox-clustering';
 
 const map = new mapboxgl.Map({
   container: 'map',
-  style: 'mapbox://styles/…',
-  center: [-3.7038, 40.4168], // Madrid, for example
-  zoom: 5,
+  style: 'mapbox://styles/mapbox/streets-v12',
+  center: [-3.7038, 40.4168],
+  zoom: 5
 });
 
-const data: LatLng[] = [
+const points = [
   { lat: 40.4168, lng: -3.7038 },
   { lat: 41.3874, lng: 2.1686 },
-  { lat: 48.8566, lng: 2.3522 },
-  // ...
+  { lat: 48.8566, lng: 2.3522 }
 ];
 
 map.on('load', () => {
-  const removeClusters = addClusteredLayer(map, data, {
-    createMarker: (cluster) => ({
-      content:
-        cluster.points.length === 1
-          ? undefined // default marker
-          : `<div class="cluster">${cluster.points.length}</div>`,
-    }),
-    onClick: ({ cluster, zoomCluster, zoom }) => {
-      console.log('Clicked cluster:', cluster, 'at zoom', zoom);
-
-      // Example: zoom into the cluster
+  const cleanup = addClusteredLayer(map, points, {
+    clusterElementSize: 40,
+    onClick: ({ zoomCluster }) => {
       zoomCluster({ padding: 80 });
-    },
+    }
   });
 
-  // later, to stop listening to zoom events:
-  // removeClusters();
+  // Call cleanup() to remove clusters and event listeners
 });
 ```
+
+## How It Works
+
+The library uses Uber's [H3 hexagonal grid system](https://h3geo.org/) to group nearby points into clusters. What makes it different:
+
+**Collision-aware resolution**: Instead of using fixed zoom-to-resolution mappings, the library calculates the pixel size of H3 hexagons at the current zoom level and compares it to your `clusterElementSize`. It automatically selects the highest resolution (smallest hexagons) where markers won't overlap.
+
+This means:
+- Set `clusterElementSize` to match your marker's pixel diameter
+- Markers will never visually collide at any zoom level
+- Resolution adjusts dynamically as you zoom
+
 ## API
-`addClusteredLayer(map, data, options?)`
+
+### `addClusteredLayer(map, data, options?)`
+
 ```typescript
-export const addClusteredLayer = <T extends { lat: number; lng: number }>(
-  map: mapboxgl.Map,
-  data: T[],
-  options?: AddClusteredLayerOptions<T>
-): (() => void);
+const cleanup = addClusteredLayer<T>(map, data, options);
 ```
 
-Returns a cleanup function that removes the zoom listeners:
+Returns a cleanup function that removes all markers and event listeners.
+
+### Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `clusterElementSize` | `number` | `40` | Pixel size of cluster markers. Resolution auto-adjusts to prevent overlap. |
+| `createMarker` | `function` | see below | Returns marker configuration for each cluster |
+| `onClick` | `function` | - | Called when a cluster is clicked |
+| `onMouseOver` | `function` | - | Called on mouse enter |
+| `onMouseOut` | `function` | - | Called on mouse leave |
+| `centeringStrategy` | `string` | `'smart'` | How to position cluster markers: `'centroid'`, `'cell-center'`, or `'smart'` |
+| `omitClustering` | `boolean` | `false` | If true, each point becomes its own cluster |
+| `throttle` | `number` | `200` | Minimum ms between recomputations during zoom |
+
+### `createMarker(cluster)`
+
+Control how each cluster renders:
+
 ```typescript
-const dispose = addClusteredLayer(map, data, options);
-// ...
-dispose();
+createMarker: (cluster) => ({
+  content: `<div class="marker">${cluster.points.length}</div>`,
+  class: 'my-marker-class',
+  anchor: 'center',
+  zIndex: 10,
+  offsetX: 0,
+  offsetY: 0
+})
 ```
-## Types
+
+Return `undefined` or omit `content` to use Mapbox's default marker.
+
+### `onClick({ cluster, zoomCluster, zoom })`
+
+The `zoomCluster` helper fits the map to the cluster's points:
+
 ```typescript
-export type LatLng = {
+onClick: ({ cluster, zoomCluster, zoom }) => {
+  console.log(`Clicked cluster with ${cluster.points.length} points at zoom ${zoom}`);
+  zoomCluster({ padding: 100, maxZoom: 15 });
+}
+```
+
+## Types
+
+```typescript
+type LatLng = {
   lat: number;
   lng: number;
-  weight?: number;
+  weight?: number; // Optional weight for centroid calculation
 };
 
-export type Cluster<T extends LatLng> = {
+type Cluster<T extends LatLng> = {
   id: string;
-  center: LatLng;  // where the marker will be placed
-  points: T[];     // original points in this cluster
+  center: LatLng;
+  points: T[];
 };
 ```
 
-## Options
+## Custom Point Data
+
+Use generics to type your point data:
+
 ```typescript
-export type AddClusteredLayerOptions<
-  T extends LatLng
-> = {
-  /**
-   * Min number of milliseconds between cluster recomputations.
-   * Applies to the zoom handler.
-   * @default 200
-   */
-  throttle?: number;
-
-  /**
-   * If true, each point becomes its own "cluster".
-   * You still get all the marker customisation and events.
-   * @default false
-   */
-  omitClustering?: boolean;
-
-  /**
-   * How to render each cluster marker.
-   * If `content` is undefined for a single-point cluster,
-   * a default Mapbox Marker is used.
-   */
-  createMarker?: (cluster: Cluster<T>) =>
-    | {
-        content?: string;             // HTML string
-        zIndex?: number;
-        anchor?: mapboxgl.Anchor;
-        class?: string;              // extra CSS class
-        offsetY?: number;
-        offsetX?: number;
-      }
-    | undefined;
-
-  /**
-   * Called when the cluster marker is clicked.
-   */
-  onClick?: (params: {
-    cluster: Cluster<T>;
-    zoomCluster: (options: {
-      padding: number | mapboxgl.PaddingOptions;
-    }) => void;
-    zoom: number;
-  }) => void;
-
-  /**
-   * Called when the mouse enters the cluster marker element.
-   */
-  onMouseOver?: (params: { cluster: Cluster<T> }) => void;
-
-  /**
-   * Called when the mouse leaves the cluster marker element.
-   */
-  onMouseOut?: (params: { cluster: Cluster<T> }) => void;
-
-  /**
-   * How to compute the center of multi-point clusters.
-   * - 'centroid'    → geometric weighted centroid of points
-   * - 'cell-center' → center of the underlying H3 cell
-   * - 'smart'       → mix of both (default)
-   * @default 'smart'
-   */
-  centeringStrategy?: 'centroid' | 'cell-center' | 'smart';
-};
-```
-
-## Custom Marker Example
-```typescript
-addClusteredLayer(map, data, {
-  createMarker: (cluster) => {
-    const count = cluster.points.length;
-
-    if (count === 1) {
-      // Let Mapbox draw the default pin
-      return;
-    }
-
-    return {
-      content: `
-        <div class="my-cluster">
-          <span class="my-cluster__count">${count}</span>
-        </div>
-      `,
-      class: 'my-cluster--big',
-      offsetY: -10,
-    };
-  },
-  onMouseOver: ({ cluster }) => {
-    console.log('Hover cluster', cluster.id, cluster.points.length);
-  },
-});
-```
-
-Example CSS:
-```css
-.my-cluster {
-  width: 32px;
-  height: 32px;
-  border-radius: 999px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: white;
-  border: 2px solid #222;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.my-cluster__count {
-  pointer-events: none;
-}
-```
-## Centering Strategy
-`centeringStrategy` controls where the cluster marker is placed:
-- 'centroid':
-
-    Uses the (weighted) centroid of all points in the cluster.
-
-- 'cell-center'
-  
-  Uses the center of the H3 cell that contains the points.
-
-- 'smart' (default)
-  
-  Uses a mix of techniques to center the cluster as accurately as possible while trying to avoid collissions.
-
-If you pass weight in your LatLng, it affects centroid computation.
-
-## How Clustering Works (Internals)
-
-- Uses an internal H3 grid implementation (h3-js) to:
-  - Choose a grid resolution based on current zoom level.
-  - Map each visible point into a cell id.
-  - Group points by cell id → that’s your cluster.
-- Clustering only considers points in the current map bounds
-- Points outside the viewport are ignored until you pan/zoom them into view.
-- Listeners:
-  - `zoom` → throttled recompute (by options.throttle)
-  - `zoomend` → debounced recompute
-
-## Cleanup
-
-`addClusteredLayer` returns a function that removes its zoom listeners:
-```typescript
-const remove = addClusteredLayer(map, data);
-// ...
-remove();
-```
-
-The markers are also replaced on every recomputation, so you don’t need to manage them manually.
-
-## TypeScript
-
-This library is written in TypeScript and ships its own types.
-You can strongly type your point data:
-```typescript
-type MyPoint = LatLng & {
+type MyPoint = {
+  lat: number;
+  lng: number;
   id: string;
   name: string;
+  category: string;
 };
 
 const points: MyPoint[] = [/* ... */];
@@ -274,13 +145,61 @@ const points: MyPoint[] = [/* ... */];
 addClusteredLayer<MyPoint>(map, points, {
   onClick: ({ cluster }) => {
     // cluster.points is MyPoint[]
-    console.log(cluster.points[0].name);
-  },
+    console.log(cluster.points.map(p => p.name));
+  }
 });
 ```
-## Notes & Limitations
 
-Currently the grid system is hard-wired to H3.
-There is an internal S2 implementation that can be wired in if you need it.
+## Example with Custom Styling
 
-All markers are managed globally inside the module; this utility is designed for one clustered layer per map instance. If you need multiple, you’ll want to adapt the implementation.
+```typescript
+addClusteredLayer(map, points, {
+  clusterElementSize: 48,
+  createMarker: (cluster) => {
+    if (cluster.points.length === 1) {
+      return { content: '<div class="single-marker"></div>' };
+    }
+    return {
+      content: `<div class="cluster-marker">${cluster.points.length}</div>`
+    };
+  },
+  onClick: ({ zoomCluster }) => zoomCluster({ padding: 60 })
+});
+```
+
+```css
+.cluster-marker {
+  width: 48px;
+  height: 48px;
+  background: #3b82f6;
+  border: 2px solid white;
+  border-radius: 50%;
+  color: white;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.single-marker {
+  width: 12px;
+  height: 12px;
+  background: #ef4444;
+  border-radius: 50%;
+  border: 2px solid white;
+}
+```
+
+## Centering Strategies
+
+| Strategy | Description |
+|----------|-------------|
+| `'smart'` (default) | Uses centroid for accuracy, blends toward cell center when neighboring cells have clusters to avoid collisions |
+| `'centroid'` | Weighted average of all points in the cluster |
+| `'cell-center'` | Center of the H3 hexagon cell |
+
+## License
+
+MIT

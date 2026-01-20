@@ -1,85 +1,46 @@
 import mapbox from 'mapbox-gl';
 import * as h3 from 'h3-js';
-import { s2 } from 's2js';
 
 function hashObject(obj: any) {
 	return JSON.stringify(obj, Object.keys(obj).sort());
 }
 
-type GridSystemId = 'h3' | 's2';
+const getHexagonPixelDiameter = (resolution: number, zoom: number, latitude: number): number => {
+	const edgeLengthMeters = h3.getHexagonEdgeLengthAvg(resolution, 'm');
+	// Hexagon "diameter" is approximately 2 * edge length * cos(30deg) ≈ 1.73 * edge
+	const hexDiameterMeters = edgeLengthMeters * 1.732;
 
-type GridImpl = {
-	latLngToCell(lat: number, lng: number, level: number): string;
-	cellToLatLng(id: string): [number, number];
-	neighbors(id: string): string[];
-	getResolution: (zoom: number) => number;
+	// Convert meters to pixels at this zoom/latitude
+	const earthCircumference = 40075016.686;
+	const metersPerPixel =
+		(earthCircumference * Math.cos((latitude * Math.PI) / 180)) / (256 * Math.pow(2, zoom));
+
+	return hexDiameterMeters / metersPerPixel;
 };
 
-const h3Grid: GridImpl = {
-	latLngToCell(lat, lng, level) {
+const getResolutionForZoom = (zoom: number, latitude: number, elementSizePx: number): number => {
+	// Start from highest resolution and decrease until hexagons are bigger than elements
+	for (let res = 15; res >= 0; res--) {
+		const hexPixelSize = getHexagonPixelDiameter(res, zoom, latitude);
+		if (hexPixelSize >= elementSizePx) {
+			return res;
+		}
+	}
+	return 0; // Fallback to largest hexagons
+};
+
+const h3Grid = {
+	latLngToCell(lat: number, lng: number, level: number): string {
 		return h3.latLngToCell(lat, lng, level);
 	},
-	cellToLatLng(id) {
+	cellToLatLng(id: string): [number, number] {
 		return h3.cellToLatLng(id) as [number, number];
 	},
-	neighbors(id) {
+	neighbors(id: string): string[] {
 		// h3-js gridRing gives neighbors at ring distance 1
 		return h3.gridRing(id, 1);
-	},
-	getResolution: (zoom: number) => {
-		if (zoom <= 3.0) return 0;
-		if (zoom <= 4.4) return 1;
-		if (zoom <= 5.7) return 2;
-		if (zoom <= 7.1) return 3;
-		if (zoom <= 8.4) return 4;
-		if (zoom <= 9.8) return 5;
-		if (zoom <= 11.4) return 6;
-		if (zoom <= 12.7) return 7;
-		if (zoom <= 14.1) return 8;
-		if (zoom <= 15.5) return 9;
-		if (zoom <= 16.8) return 10;
-		if (zoom <= 18.2) return 11;
-		if (zoom <= 19.5) return 12;
-		if (zoom <= 21.1) return 13;
-		if (zoom <= 21.9) return 14;
-		return 15;
 	}
 };
-
-const s2Grid: GridImpl = {
-	latLngToCell(lat, lng, level) {
-		const ll = s2.LatLng.fromDegrees(lat, lng);
-		const id = s2.cellid.parent(s2.cellid.fromLatLng(ll), level);
-		return id.toString();
-	},
-	cellToLatLng(id: string) {
-		const latlng = s2.cellid.latLng(BigInt(id));
-		return [latlng.lat, latlng.lng];
-	},
-	neighbors(id: string) {
-		return s2.cellid.edgeNeighbors(BigInt(id)).map(String);
-	},
-	getResolution: (zoom: number) => {
-		if (zoom <= 3.0) return 10;
-		if (zoom <= 4.4) return 11;
-		if (zoom <= 5.7) return 12;
-		if (zoom <= 7.1) return 13;
-		if (zoom <= 8.4) return 14;
-		if (zoom <= 9.8) return 15;
-		if (zoom <= 11.4) return 16;
-		if (zoom <= 12.7) return 17;
-		if (zoom <= 14.1) return 18;
-		if (zoom <= 15.5) return 19;
-		if (zoom <= 16.8) return 20;
-		if (zoom <= 18.2) return 21;
-		if (zoom <= 19.5) return 22;
-		if (zoom <= 21.1) return 23;
-		if (zoom <= 21.9) return 24;
-		return 25;
-	}
-};
-
-const getGridImpl = (system: GridSystemId): GridImpl => (system === 's2' ? s2Grid : h3Grid);
 
 const throttle = (fn: (...args: any[]) => void, minInterval: number) => {
 	let lastTime = 0;
@@ -181,6 +142,12 @@ export type AddClusteredLayerOptions<T extends LatLng> = {
 	 * @default cell-center
 	 */
 	centeringStrategy?: 'centroid' | 'cell-center' | 'smart';
+	/**
+	 * The size of cluster elements in pixels.
+	 * Resolution is automatically adjusted to prevent cluster elements from overlapping.
+	 * @default 40
+	 */
+	clusterElementSize?: number;
 	// /**
 	//  * Which spatial index to use
 	//  * @default 'h3'
@@ -193,8 +160,8 @@ const DEFAULT_OPTIONS: AddClusteredLayerOptions<LatLng> = {
 	createMarker: (d: Cluster<LatLng>) => ({
 		content: d.points.length === 1 ? undefined : `<div class="cluster">${d.points.length}</div>`
 	}),
-	centeringStrategy: 'smart' as const
-	// gridSystem: 's2'
+	centeringStrategy: 'smart' as const,
+	clusterElementSize: 40
 };
 
 export const addClusteredLayer = <T extends { lat: number; lng: number }>(
@@ -205,7 +172,7 @@ export const addClusteredLayer = <T extends { lat: number; lng: number }>(
 	options.createMarker ||= DEFAULT_OPTIONS.createMarker;
 	options.throttle ||= DEFAULT_OPTIONS.throttle;
 	options.centeringStrategy ||= DEFAULT_OPTIONS.centeringStrategy;
-	// options.gridSystem ||= DEFAULT_OPTIONS.gridSystem;
+	options.clusterElementSize ??= DEFAULT_OPTIONS.clusterElementSize;
 	const _options = options;
 
 	let markers = new Map<string, mapboxgl.Marker>();
@@ -226,10 +193,9 @@ export const addClusteredLayer = <T extends { lat: number; lng: number }>(
 		const filtered = data.filter((p) => bounds.contains(p));
 
 		const zoom = map.getZoom();
+		const center = map.getCenter();
 
-		const grid = getGridImpl('h3');
-
-		let resolution = grid.getResolution(zoom);
+		const resolution = getResolutionForZoom(zoom, center.lat, options.clusterElementSize);
 
 		const buckets = {} as Record<string, T[]>;
 		if (options.omitClustering) {
@@ -238,7 +204,7 @@ export const addClusteredLayer = <T extends { lat: number; lng: number }>(
 			}
 		} else {
 			for (const point of filtered) {
-				const cell = grid.latLngToCell(point.lat, point.lng, resolution);
+				const cell = h3Grid.latLngToCell(point.lat, point.lng, resolution);
 				buckets[cell] ||= [];
 				buckets[cell].push(point);
 			}
@@ -250,7 +216,7 @@ export const addClusteredLayer = <T extends { lat: number; lng: number }>(
 			if (options.centeringStrategy === 'centroid') {
 				center = centroid(...points);
 			} else if (options.centeringStrategy === 'cell-center') {
-				const [lat, lng] = grid.cellToLatLng(id);
+				const [lat, lng] = h3Grid.cellToLatLng(id);
 				center.lat = lat;
 				center.lng = lng;
 			} else {
@@ -261,9 +227,9 @@ export const addClusteredLayer = <T extends { lat: number; lng: number }>(
 				} else {
 					center = centroid(...points);
 
-					const [lat, lng] = grid.cellToLatLng(id);
+					const [lat, lng] = h3Grid.cellToLatLng(id);
 
-					const ids = grid.neighbors(id);
+					const ids = h3Grid.neighbors(id);
 					const someNeighborHasClusters = ids.some((id) => buckets[id]);
 					if (someNeighborHasClusters) {
 						center = centroid(
