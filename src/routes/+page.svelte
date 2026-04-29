@@ -23,8 +23,11 @@
 					lng: data[500].longitude,
 					lat: data[500].latitude
 				},
-				zoom: 10
+				zoom: 10,
+				projection: 'globe'
 			});
+
+			map.addControl(new mapbox.NavigationControl());
 
 			const d = data.slice(0, 10_000).map((d) => ({ lat: d.latitude, lng: d.longitude }));
 

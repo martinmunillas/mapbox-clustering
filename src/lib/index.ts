@@ -44,11 +44,26 @@ const h3Grid = {
 
 const throttle = (fn: (...args: any[]) => void, minInterval: number) => {
 	let lastTime = 0;
+	let trailingTimer: ReturnType<typeof setTimeout> | null = null;
 	return function (...args: any[]) {
 		const now = Date.now();
+		if (trailingTimer) {
+			clearTimeout(trailingTimer);
+			trailingTimer = null;
+		}
 		if (now - lastTime >= minInterval) {
 			lastTime = now;
 			fn(...args);
+		} else {
+			// Schedule a trailing call so the last invocation is never dropped
+			trailingTimer = setTimeout(
+				() => {
+					lastTime = Date.now();
+					trailingTimer = null;
+					fn(...args);
+				},
+				minInterval - (now - lastTime)
+			);
 		}
 	};
 };
@@ -133,6 +148,7 @@ export type AddClusteredLayerOptions<T extends LatLng> = {
 		cluster: Cluster<T>;
 		zoomCluster: (options: { padding: number | mapboxgl.PaddingOptions; maxZoom?: number }) => void;
 		zoom: number;
+		event: MouseEvent;
 	}) => void;
 	onMouseOver?: (params: { cluster: Cluster<T> }) => void;
 	onMouseOut?: (params: { cluster: Cluster<T> }) => void;
@@ -177,22 +193,46 @@ export const addClusteredLayer = <T extends { lat: number; lng: number }>(
 
 	let markers = new Map<string, mapboxgl.Marker>();
 
-	const compute = (e?: { type: 'zoom' | 'zoomend'; originalEvent?: MouseEvent }) => {
+	const compute = (e?: { type: string; originalEvent?: MouseEvent }) => {
 		if (e && e.type === 'zoom' && !e.originalEvent) {
-			// if there is no original event, it was a programatic zoom thus we don't recompute on zoom, only on zoomend
+			// if there is no original event, it was a programmatic zoom thus we don't recompute on zoom, only on moveend
 			return;
 		}
 		const options = _options as Required<typeof _options>;
 
 		if (!map) return;
-		const padding = map.getPadding();
-		map.setPadding({ bottom: 0, top: 0, left: 0, right: 0 });
-		const bounds = map.getBounds();
-		map.setPadding(padding);
-		if (!bounds) return;
-		const filtered = data.filter((p) => bounds.contains(p));
-
 		const zoom = map.getZoom();
+
+		// At low zoom levels (especially globe projection), bounds calculations are unreliable.
+		// Show all points below zoom 5.
+		let filtered: T[];
+		if (zoom < 5) {
+			filtered = data;
+		} else {
+			// Compute unpadded bounds without mutating map state to avoid flicker
+			const canvas = map.getCanvas();
+			const p = map.getPadding();
+			const padding = {
+				top: p.top ?? 0,
+				bottom: p.bottom ?? 0,
+				left: p.left ?? 0,
+				right: p.right ?? 0
+			};
+			const topLeft = map.unproject([padding.left, padding.top]);
+			const topRight = map.unproject([canvas.clientWidth - padding.right, padding.top]);
+			const bottomLeft = map.unproject([padding.left, canvas.clientHeight - padding.bottom]);
+			const bottomRight = map.unproject([
+				canvas.clientWidth - padding.right,
+				canvas.clientHeight - padding.bottom
+			]);
+			const bounds = new mapbox.LngLatBounds()
+				.extend(topLeft)
+				.extend(topRight)
+				.extend(bottomLeft)
+				.extend(bottomRight);
+			if (bounds.isEmpty()) return;
+			filtered = data.filter((p) => bounds.contains(p));
+		}
 		const center = map.getCenter();
 
 		const resolution = getResolutionForZoom(zoom, center.lat, options.clusterElementSize);
@@ -263,8 +303,6 @@ export const addClusteredLayer = <T extends { lat: number; lng: number }>(
 				}
 
 				element.onclick = (e) => {
-					e.stopPropagation();
-
 					type ZoomCluster = Parameters<
 						NonNullable<AddClusteredLayerOptions<T>['onClick']>
 					>[0]['zoomCluster'];
@@ -285,7 +323,7 @@ export const addClusteredLayer = <T extends { lat: number; lng: number }>(
 						});
 					};
 
-					options.onClick?.({ cluster, zoomCluster, zoom });
+					options.onClick?.({ cluster, zoomCluster, zoom, event: e });
 				};
 				if (options.onMouseOver) {
 					element.onmouseover = () => options.onMouseOver({ cluster });
@@ -323,15 +361,15 @@ export const addClusteredLayer = <T extends { lat: number; lng: number }>(
 		markers = newMarkers;
 	};
 
-	const handleZoom = throttle(compute, 200);
+	const handleZoom = throttle(compute, options.throttle!);
 	map.on('zoom', handleZoom);
-	const handleZoomEnd = debounce(compute, 100);
-	map.on('zoomend', handleZoomEnd);
+	const handleMoveEnd = debounce(compute, 100);
+	map.on('moveend', handleMoveEnd);
 	compute();
 
 	return () => {
 		map.off('zoom', handleZoom);
-		map.off('zoomend', handleZoomEnd);
+		map.off('moveend', handleMoveEnd);
 		for (const [_, marker] of markers) {
 			marker.remove();
 		}
